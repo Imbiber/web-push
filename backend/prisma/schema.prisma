@@ -1,0 +1,166 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@index([email])
+}
+
+model Project {
+  id             String   @id @default(uuid())
+  name           String
+  apiKey         String   @unique @default(uuid())
+  vapidPublicKey String
+  vapidPrivateKey String
+  vapidEmail     String   @default("noreply@pushnotify.app")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscriptions Subscription[]
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([apiKey])
+}
+
+model Subscription {
+  id         String   @id @default(uuid())
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+
+  // Browser and device details
+  browserName    String?
+  browserVersion String?
+  osName         String?
+  osVersion      String?
+  deviceType     String?
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tags              SubscriptionTag[]
+  notificationLogs  NotificationLog[]
+
+  @@index([projectId])
+  @@index([endpoint])
+  @@index([browserName])
+  @@index([osName])
+  @@index([deviceType])
+  @@index([isActive])
+}
+
+model SubscriptionTag {
+  id        String   @id @default(uuid())
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, key])
+  @@index([subscriptionId])
+  @@index([key])
+  @@index([value])
+}
+
+enum NotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+enum TargetType {
+  ALL
+  SEGMENT
+  INDIVIDUAL
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  title     String
+  body      String
+  icon      String?
+  badge     String?
+  image     String?
+  url       String?
+
+  targetType      TargetType
+  targetSegment   Json?  // { browser, os, device, tags, subscriptionIds }
+
+  status          NotificationStatus @default(PENDING)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+
+  totalTargeted   Int      @default(0)
+  totalSent       Int      @default(0)
+  totalDelivered  Int      @default(0)
+  totalClicked    Int      @default(0)
+  totalFailed     Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  logs NotificationLog[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  CLICKED
+  FAILED
+}
+
+model NotificationLog {
+  id        String         @id @default(uuid())
+  status    DeliveryStatus @default(PENDING)
+  error     String?
+  deliveredAt DateTime?
+  clickedAt   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([subscriptionId])
+  @@index([status])
+}
